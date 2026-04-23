@@ -4,10 +4,7 @@ import polars as pl
 from pathlib import Path
 from datasets import load_dataset, DatasetDict
 
-from constants import TAGS
-
-BASE_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE_DIR / "sample_data"
+from constants import TAGS, DATA_DIR
 
 def download_dataset(
     path: str, 
