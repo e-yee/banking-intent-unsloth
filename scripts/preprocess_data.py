@@ -1,10 +1,12 @@
 import json
 import polars as pl
 
-from pathlib import Path
 from datasets import load_dataset, DatasetDict
 
-from constants import TAGS, DATA_DIR
+from utils.paths import DATA_DIR
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def download_dataset(
     path: str, 
@@ -12,7 +14,7 @@ def download_dataset(
 ) -> tuple:
     """Download dataset with revision and convert to polars.DataFrames."""
     
-    print(f"{TAGS["info"]} Downloading dataset from {path} (revision={revision})...")
+    logger.info(f"Downloading dataset from {path} (revision={revision})...")
     
     dataset: DatasetDict = load_dataset(
         path=path,
@@ -24,10 +26,10 @@ def download_dataset(
     
     # Converts to Polars
     train_pl = pl.from_arrow(dataset["train"].data.table)
-    print(f"{TAGS["info"]} Loaded {train_pl.shape[0]:,} rows (train data).")
+    logger.info(f"Loaded {train_pl.shape[0]:,} rows (train data).")
     
     test_pl = pl.from_arrow(dataset["test"].data.table)
-    print(f"{TAGS["info"]} Loaded {test_pl.shape[0]:,} rows (test data).")
+    logger.info(f"Loaded {test_pl.shape[0]:,} rows (test data).")
     
     # Labels
     label_feature = dataset["train"].features.get("label")
@@ -35,18 +37,18 @@ def download_dataset(
     labels = None
     if label_feature:
         labels = label_feature.names
-        print(f"{TAGS["info"]} Loaded {len(labels)} labels.")
+        logger.info(f"Loaded {len(labels)} labels.")
         
         categories_path = output_path / "categories.json"
         with open(categories_path, "w", encoding="utf-8") as f:
             json.dump(labels, f, indent=2, ensure_ascii=False)
             
-        print(f"{TAGS["info"]} Saved labels to {categories_path}.")
+        logger.info(f"Saved labels to {categories_path}.")
     else:
-        print(f"{TAGS["warning"]} No labels found.")
+        logger.warning("No labels found.")
     
     # Save dataset
-    print(f"{TAGS["info"]} Saving dataset to {output_path}...")
+    logger.info(f"Saving dataset to {output_path}...")
     
     train_path = output_path / "train.csv"
     test_path = output_path / "test.csv"
@@ -54,7 +56,7 @@ def download_dataset(
     train_pl.write_csv(train_path)
     test_pl.write_csv(test_path)
     
-    print(f"{TAGS["success"]} Dataset saved successfully.")
+    logger.success("Dataset saved successfully.")
     
     return train_pl, test_pl, labels
 
@@ -69,9 +71,10 @@ def preprocess_data(
 ) -> tuple:
     """Preprocess raw data."""
     
-    label_map = {i:label for i, label in enumerate(labels)}
+    label_map = {f"L<{i}>":label for i, label in enumerate(labels)}
+    mapping = {i:f"L<{i}>" for i in range(len(labels))}
     
-    def clean_data(data: pl.DataFrame) -> pl.DataFrame:
+    def preprocess(data: pl.DataFrame) -> pl.DataFrame:
         return (
             data
             .with_columns(
@@ -80,23 +83,23 @@ def preprocess_data(
                 .alias("cleaned_text"),
                 
                 pl.col("label")
-                .replace_strict(label_map, return_dtype=pl.String)
+                .replace_strict(mapping, return_dtype=pl.String)
                 .alias("label_name")
             )
             .select(["cleaned_text", "label_name"])
         )
     
     # Clean data
-    print(f"{TAGS["info"]} Cleaning dataset...")
+    logger.info("Preprocessing dataset...")
     
-    cleaned_train_data = clean_data(train_data)
-    cleaned_test_data = clean_data(test_data)
+    cleaned_train_data = preprocess(train_data)
+    cleaned_test_data = preprocess(test_data)
     
     # Save data
     output_path = DATA_DIR / "preprocessed"
     output_path.mkdir(parents=True, exist_ok=True)
     
-    print(f"{TAGS["info"]} Saving preprocessed dataset to {output_path}...")
+    logger.info(f"Saving preprocessed dataset to {output_path}...")
     
     train_path = output_path / "train.csv"
     test_path = output_path / "test.csv"
@@ -107,7 +110,7 @@ def preprocess_data(
     with open(output_path / "label_map.json", "w", encoding="utf-8") as f:
         json.dump(label_map, f, indent=2, ensure_ascii=False)
     
-    print(f"{TAGS["success"]} Preprocessed dataset saved successfully.")
+    logger.success("Preprocessed dataset saved successfully.")
     
     return cleaned_train_data, cleaned_test_data, label_map
 
