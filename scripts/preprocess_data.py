@@ -14,7 +14,7 @@ def download_dataset(
 ) -> tuple:
     """Download dataset with revision and convert to polars.DataFrames."""
     
-    logger.info(f"Downloading dataset from {path} (revision={revision})...")
+    logger.info(f"Downloading dataset [{path} | revision={revision}]...")
     
     dataset: DatasetDict = load_dataset(
         path=path,
@@ -80,20 +80,20 @@ def preprocess_data(
             .with_columns(
                 pl.col("text")
                 .map_elements(clean_text, return_dtype=pl.String)
-                .alias("cleaned_text"),
+                .alias("preprocessed_text"),
                 
                 pl.col("label")
                 .replace_strict(mapping, return_dtype=pl.String)
-                .alias("label_name")
+                .alias("label_encoded")
             )
-            .select(["cleaned_text", "label_name"])
+            .select(["preprocessed_text", "label_encoded"])
         )
     
-    # Clean data
+    # Preprocess data
     logger.info("Preprocessing dataset...")
     
-    cleaned_train_data = preprocess(train_data)
-    cleaned_test_data = preprocess(test_data)
+    preprocessed_train_data = preprocess(train_data)
+    preprocessed_test_data = preprocess(test_data)
     
     # Save data
     output_path = DATA_DIR / "preprocessed"
@@ -104,19 +104,22 @@ def preprocess_data(
     train_path = output_path / "train.csv"
     test_path = output_path / "test.csv"
     
-    cleaned_train_data.write_csv(train_path)
-    cleaned_test_data.write_csv(test_path)
+    preprocessed_train_data.write_csv(train_path)
+    preprocessed_test_data.write_csv(test_path)
     
     with open(output_path / "label_map.json", "w", encoding="utf-8") as f:
         json.dump(label_map, f, indent=2, ensure_ascii=False)
     
     logger.success("Preprocessed dataset saved successfully.")
     
-    return cleaned_train_data, cleaned_test_data, label_map
+    return preprocessed_train_data, preprocessed_test_data, label_map
 
 def main():
-    train_pl, test_pl, labels = download_dataset("PolyAI/banking77", "refs/convert/parquet")
-    preprocess_data(train_pl, test_pl, labels)
+    try:
+        train_pl, test_pl, labels = download_dataset("PolyAI/banking77", "refs/convert/parquet")
+        preprocess_data(train_pl, test_pl, labels)
+    except Exception as e:
+        logger.error(f"Preprocessing data failed: {e}")
     
 if __name__ == "__main__":
     main()
