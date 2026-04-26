@@ -4,6 +4,7 @@ import polars as pl
 
 from dotenv import load_dotenv
 from datasets import load_dataset, DatasetDict
+from typing import Dict, List, Tuple
 
 from utils.paths import DATA_DIR
 from utils.logger import get_logger
@@ -15,7 +16,7 @@ logger = get_logger(__name__)
 def download_dataset(
     path: str, 
     revision: str
-) -> tuple:
+) -> Tuple[pl.DataFrame, pl.DataFrame, List[str] | None]:
     """Download dataset with revision and convert to polars.DataFrames."""
     
     logger.info(f"Downloading dataset [{path} | revision={revision}]...")
@@ -74,7 +75,7 @@ def preprocess_data(
     train_df: pl.DataFrame,
     test_df: pl.DataFrame,
     labels: list
-) -> tuple:
+) -> Tuple[pl.DataFrame, pl.DataFrame, Dict[str, str]]:
     """Preprocess raw data."""
     
     label_map = {i+1:label for i, label in enumerate(labels)}
