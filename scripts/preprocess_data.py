@@ -1,10 +1,14 @@
+import os
 import json
 import polars as pl
 
+from dotenv import load_dotenv
 from datasets import load_dataset, DatasetDict
 
 from utils.paths import DATA_DIR
 from utils.logger import get_logger
+
+load_dotenv()
 
 logger = get_logger(__name__)
 
@@ -16,9 +20,11 @@ def download_dataset(
     
     logger.info(f"Downloading dataset [{path} | revision={revision}]...")
     
+    hf_token = os.getenv("HF_TOKEN")
     dataset: DatasetDict = load_dataset(
         path=path,
-        revision=revision
+        revision=revision,
+        token=hf_token
     )
     
     output_path = DATA_DIR / "raw"
@@ -71,22 +77,17 @@ def preprocess_data(
 ) -> tuple:
     """Preprocess raw data."""
     
-    label_map = {f"{i+1}":label for i, label in enumerate(labels)}
-    mapping = {i:i+1 for i in range(len(labels))}
+    label_map = {i+1:label for i, label in enumerate(labels)}
     
     def preprocess(data: pl.DataFrame) -> pl.DataFrame:
         return (
             data
             .with_columns(
                 pl.col("text")
-                .map_elements(clean_text, return_dtype=pl.String)
-                .alias("preprocessed_text"),
+                .map_elements(clean_text, return_dtype=pl.String),
                 
-                pl.col("label")
-                .replace_strict(mapping)
-                .alias("label_encoded")
+                pl.col("label") + 1
             )
-            .select(["preprocessed_text", "label_encoded"])
         )
     
     # Preprocess data
