@@ -123,8 +123,7 @@ def main():
         parser.add_argument("--message")
         
         args = parser.parse_args()
-        message = args.message
-        print(message)
+        message = args.message if message is not None else "How do I locate my card?"
         
         with open(CONFIG_DIR / "inference.yaml", "r") as f:
             configs = yaml.safe_load(f)
