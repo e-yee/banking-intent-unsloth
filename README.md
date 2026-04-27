@@ -1,23 +1,14 @@
 # Banking Intent Unsloth
 
-## Table of Contents
-
-- [1. Overview](#1-overview)
-- [2. Project Structure](#2-project-structure)
-- [Training](#training)
-- [Evaluation](#evaluation)
-
-
 ## 1. Overview
 
 This project aims to fine-tune `Qwen3-4B-Base` for BANKING77 intent classification.
 
 Main pipeline:
 
-1. Download the original BANKING77 dataset (using the `.csv` in git)
-2. Clean and split the dataset into train/validation/test
-3. Fine-tune with Unsloth + LoRA
-4. Run single-message inference and return the corresponding intent label
+1. Download the original BANKING77 dataset (using huggingface hub) and clean.
+2. Fine-tune with Unsloth + LoRA
+3. Run single-message inference and return the corresponding intent label
 
 ---
 
@@ -26,21 +17,26 @@ Main pipeline:
 ```text
 banking-intent-unsloth/
 |-- configs/
-|   |-- train.yaml          
-|   \-- inference.yaml
+|   |-- train.yaml      # Settings for training        
+|   \-- inference.yaml  # Settings for inference
 |-- models/
-|   |-- .gitignore
+|   |-- .gitignore  # Placeholder for fine-tuned models
 |-- sample_data/
-|   |-- .gitignore
+|   |-- .gitignore  # Placeholder for raw and preprocessed data
 |-- scripts/
-|   |-- data_collator.py 
-|   |-- preprocess_data.py
-|   |-- inference.py      
-|   \-- train.py          
-|-- train.sh              
-|-- inference.sh          
-|-- requirements.txt      
-\-- README.md
+|   |-- data_collator.py    # Data collator for training
+|   |-- preprocess_data.py  # Preprocess data script
+|   |-- inference.py        # Load model and inference
+|   \-- train.py            # Fine-tune model
+|-- utils/
+|   |-- logger.py # Customed logger
+|   \-- paths.py  # Paths to folders
+|-- example.env      # Store HuggingFace access token
+|-- .gitignore       # Ignore pycache and .env    
+|-- README.md        # Documents
+|-- train.sh         # Shell script for training
+|-- inference.sh     # Shell script for inferencing
+\-- requirements.txt # Requirements   
 ```
 
 ---
@@ -64,7 +60,7 @@ banking-intent-unsloth/
 ### 4.1 Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/banking-intent-unsloth.git
+git clone https://github.com/e-yee/banking-intent-unsloth.git
 cd banking-intent-unsloth
 ```
 
@@ -90,9 +86,13 @@ pip install -r requirements.txt
 
 ## 5. Data Preparation
 
-Run training to automatically download and preprocess dataset.
+### 5.1 Download Dataset
 
-### 5.1 Dataset overview
+```bash
+python -m scripts.preprocess_data
+```
+
+### 5.2 Dataset Overview
 
 The [BANKING77](https://huggingface.co/datasets/PolyAI/banking77) dataset contains **13,083** customer service queries across **77** banking intent categories.
 
@@ -105,8 +105,8 @@ The [BANKING77](https://huggingface.co/datasets/PolyAI/banking77) dataset contai
 
 ```csv
 text,label
-"What is the exchange rate?",exchange_rate
-"I lost my card.",lost_or_stolen_card
+i am still waiting on my card?,12
+what can i do if my card still hasn't arrived after 2 weeks?,12
 ...
 ```
 
@@ -119,9 +119,10 @@ text,label
 
 `scripts/preprocess_data.py`:
 
-1. Loads a CSV with `datasets.load_dataset`
-2. Maps each `category` string to a numeric label via `map.json`
-3. Performs a stratified 90/10 train/validation split (seed `42`)
+1. Download raw dataset including `train.csv` and `test.csv`, extract categories into `categories.json`
+2. Lower and trim extra spaces in text
+3. Increment label number by one
+4. Generate a mapping from numeric value to intent name, save into `label_map.json`
 
 ---
 
@@ -130,39 +131,52 @@ text,label
 ### 6.1 Configuration (`configs/train.yaml`)
 
 ```yaml
-model_name: unsloth/Qwen3-4B-Base
-load_in_4bit: False
-max_seq_length: 2048
-dtype: null
-per_device_train_batch_size: 32
-gradient_accumulation_steps: 1
-warmup_steps: 15
-learning_rate: 2e-4
-packing: False
-logging_steps: 10
-optim: adamw_8bit
-weight_decay: 0.01
-lr_scheduler_type: cosine
-seed: 3407
-num_train_epochs: 1
-report_to: none
+model: # Settings for loading FastLanguageModel
+  model_name: unsloth/Qwen3-4B-Base
+  load_in_4bit: False
+  max_seq_length: 2048
+  dtype: null
 
-# LoRA
-r: 16
-target_modules:
-  - q_proj
-  - k_proj
-  - v_proj
-  - o_proj
-  - gate_proj
-  - up_proj
-  - down_proj 
-lora_alpha: 16
-lora_dropout: 0
-bias: none
-use_gradient_checkpointing: unsloth
-random_state: 3407
-use_rlora: True
+lora: # Settings for adding LoRA adapter
+  r: 16
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj 
+  lora_alpha: 16
+  lora_dropout: 0
+  bias: none
+  use_gradient_checkpointing: unsloth
+  random_state: 3407
+  use_rlora: True
+
+sftconfig: # Settings for SFTTrainer arguments
+  per_device_train_batch_size: 32
+  gradient_accumulation_steps: 1
+  warmup_steps: 15
+  learning_rate: 2e-4
+  packing: False
+  logging_steps: 10
+  optim: adamw_8bit
+  weight_decay: 0.01
+  lr_scheduler_type: cosine
+  seed: 3407
+  num_train_epochs: 1
+  report_to: none
+
+tokenizer: # Settings for tokenizer's encoder
+  return_tensors: pt
+  padding: True
+  truncation: True
+  max_length: 2048
+
+generate: # Settings for model's generation
+  max_new_tokens: 2
+  use_cache: True
 ```
 
 Adjust these values before running if needed.
@@ -188,7 +202,7 @@ Only the tokens after `SOLUTION` contribute to the loss (prefix tokens are maske
 bash train.sh
 ```
 
-This executes `python -m scripts.preprocess_data && python -m scripts.train`.
+This executes `python -m scripts.train`.
 
 The fine-tuned is automatically saved to `models/`.
 
@@ -196,14 +210,14 @@ The fine-tuned is automatically saved to `models/`.
 
 ## 7. Evaluation Results
 
-> 📊 *Run `bash train.sh` (which also calls `_evaluate`) or execute `scripts/train.py` to populate these numbers.*
+> 📊 *Run `bash train.sh` or execute `scripts/train.py` to populate these numbers.*
 
 | Metric | Score |
 | ---------- | ------- |
 | Accuracy | 92.11% |
 | Macro F1 | 92.11% |
 
-**Test set:** `sample_data/test.csv` (~3,080 samples, 77 classes)
+**Test set:** `sample_data/preprocessed/test.csv` (~3,080 samples, 77 classes)
 
 ---
 
@@ -212,18 +226,18 @@ The fine-tuned is automatically saved to `models/`.
 ### 8.1 Configuration (`configs/inference.yaml`)
 
 ```yaml
-model:
+model: # Settings for loading FastLanguageModel fine-tuned
   load_in_4bit: False
   max_seq_length: 2048
   dtype: null
 
-tokenizer:
+tokenizer: # Settings for tokenizer's encoder
   return_tensors: pt
   padding: True
   truncation: True
   max_length: 2048
 
-generate:
+generate: # Settings for model's generation
   max_new_tokens: 2
   use_cache: True
 ```
@@ -239,38 +253,40 @@ This executes `python -m scripts.inference "$@"`.
 The default message in `inference.py` is:
 
 ```python
-message = "Am I able to get a card in EU?"
+message = "How do I locate my card?"
 ```
 
-You can change this to any banking-related query. The script will print the predicted intent label, e.g.:
+You can change this to any banking-related query by changing `MESSAGE`. The script will print the predicted intent label, e.g.:
 
 ```text
-card_abroad
+card_arrival
 ```
 
 ### 8.3 Using `IntentClassification` programmatically
 
 ```python
+import yaml
+
 from scripts.inference import IntentClassification
-from pathlib import Path
+from utils.paths import BASE_DIR
 
-classifier = IntentClassification(
-    model_path=Path("path/to/model"),
-    yaml_path=Path("path/to/config")
-)
+with open(CONFIG_DIR / "inference.yaml", "r") as f:
+    configs = yaml.safe_load(f)
 
-intent = classifier("Am I able to get a card in EU?")
-print(intent)  # → "country_support"
+configs["model"]["model_name"] = BASE_DIR / "models" / "unsloth" "Qwen3-4B-Base" / "finetuned"
+
+message = "How do I locate my card?"
+classifier = IntentClassification(configs)
+classifier(message)
 ```
 
 ---
 
 ## 9. Demo
 
-> 🎬 **Demo video coming soon.**
-> **Please note that my laptop doesn't have a GPU so my demo will be on Kaggle**
-> **Link to Kaggle inference and Evaluation notebook: **
-> *(Place your demo video or GIF here — e.g., `![Demo](assets/demo.gif)` or a YouTube link.)*
+- [Kaggle Train and Evaluate](https://www.kaggle.com/code/ethanyee2706/banking-intent-unsloth-train)
+- [Kaggle Inference](https://www.kaggle.com/code/ethanyee2706/banking-intent-unsloth-inference)
+- [Video Demo](https://drive.google.com/drive/folders/1HEx5UYuCEEcvu6yQ5iocEiJKI6IwgDIp?usp=sharing)
 
 ---
 
@@ -278,3 +294,4 @@ print(intent)  # → "country_support"
 
 - [BANKING77 Dataset — PolyAI](https://huggingface.co/datasets/PolyAI/banking77)
 - [Unsloth](https://github.com/unslothai/unsloth)
+- [Unsloth Classification](https://colab.research.google.com/github/timothelaborie/text_classification_scripts/blob/main/unsloth_classification.ipynb)

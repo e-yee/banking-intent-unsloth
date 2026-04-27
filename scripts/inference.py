@@ -114,7 +114,7 @@ class IntentClassification:
             **encode, 
             **self.configs["generate"]
         )
-        decode = self.tokenizer.decode(output[:, -2:])[0]
+        decode = str(int(self.tokenizer.decode(output[:, -2:])[0]))
         print(self.label_map[decode])
         
 def main():
