@@ -1,0 +1,46 @@
+model:
+  model_name: unsloth/Qwen3-4B-Base
+  load_in_4bit: False
+  max_seq_length: 2048
+  dtype: null
+
+lora:
+  r: 16
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj 
+  lora_alpha: 16
+  lora_dropout: 0
+  bias: none
+  use_gradient_checkpointing: unsloth
+  random_state: 3407
+  use_rlora: True
+
+sftconfig:
+  per_device_train_batch_size: 32
+  gradient_accumulation_steps: 1
+  warmup_steps: 15
+  learning_rate: 2e-4
+  packing: False
+  logging_steps: 10
+  optim: adamw_8bit
+  weight_decay: 0.01
+  lr_scheduler_type: cosine
+  seed: 3407
+  num_train_epochs: 1
+  report_to: none
+
+tokenizer:
+  return_tensors: pt
+  padding: True
+  truncation: True
+  max_length: 2048
+
+generate:
+  max_new_tokens: 2
+  use_cache: True

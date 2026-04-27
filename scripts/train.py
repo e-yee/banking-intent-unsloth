@@ -1,7 +1,6 @@
 import yaml
 import torch
 import datasets
-import transformers
 import polars as pl
 
 from tqdm import tqdm
@@ -15,6 +14,7 @@ from utils.logger import get_logger
 from utils.paths import BASE_DIR, CONFIG_DIR, DATA_DIR
 from data_collator import DataCollatorForTwoLastTokensLM
 
+import transformers
 transformers.logging.set_verbosity_error()
 
 logger = get_logger(__name__)
@@ -87,7 +87,7 @@ def format_train_data(
     return dataset
 
 def build_model_and_tokenizer(
-    config: dict,
+    config: Dict[str, Any],
     max_digit: int = 10 # For finetuning LM head
 ) -> Tuple[Any, Any]:
     """Load and build model for finetuning two last tokens LM."""
@@ -132,7 +132,7 @@ def build_model_and_tokenizer(
     
     return model, tokenizer
 
-def add_lora_adapter(model, config: dict) -> Any:
+def add_lora_adapter(model, config: Dict[str, Any]) -> Any:
     """Add lora adapter for model."""
     
     logger.info("Adding lora adapter for model...")
@@ -149,7 +149,7 @@ def add_lora_adapter(model, config: dict) -> Any:
 def build_trainer(
     model, 
     tokenizer,
-    config: dict,
+    config: Dict[str, Any],
     data_collator: DataCollatorForTwoLastTokensLM,
     train_dataset: datasets.Dataset
 ) -> Any:
@@ -197,7 +197,8 @@ def format_test_data(
 def evaluate(
     model: Any,
     tokenizer: Any,
-    test_df: pl.DataFrame
+    test_df: pl.DataFrame,
+    configs: Dict[str, Any]
 ):
     """Evaluate model on test data."""
     
@@ -220,12 +221,9 @@ def evaluate(
             prompts = [evaluate_prompt.format(text) for text in batch["text"]]
             inputs = tokenizer(
                 prompts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=model.config.max_seq_length
+                **configs["tokenizer"],
             ).to(device)
-            outputs = model.generate(**inputs, max_new_tokens=2, use_cache=True)
+            outputs = model.generate(**inputs, **configs["generate"])
             
             preds = list(map(int, tokenizer.batch_decode(outputs[:, -2:])))
             truth = batch["label"].to_list()
