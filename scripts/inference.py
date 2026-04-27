@@ -130,7 +130,6 @@ def main():
             configs = yaml.safe_load(f)
         
         configs["model"]["model_name"] = BASE_DIR / "models" / "unsloth" "Qwen3-4B-Base" / "finetuned"
-        configs["model"]["device_map"] = {"": 0}
         
         classifier = IntentClassification(configs)
         classifier(message)
